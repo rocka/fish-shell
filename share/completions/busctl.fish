@@ -59,9 +59,9 @@ function _fish_busctl
             else if not set -q argv[4]
                 __fish_busctl_interfaces $argv[1..2]
             else if not set -q argv[5]
-                __fish_busctl_members method $argv[1..3]
+                __fish_busctl_members_method $argv[1..3]
             else if not set -q argv[6]
-                __fish_busctl_signature $argv[1..4]
+                __fish_busctl_members_method_signature $argv[1..4]
             end
         case get-property
             # SERVICE OBJECT INTERFACE PROPERTY...
@@ -72,7 +72,7 @@ function _fish_busctl
             else if not set -q argv[4]
                 __fish_busctl_interfaces $argv[1..2]
             else
-                __fish_busctl_members property $argv[1..3]
+                __fish_busctl_members_property $argv[1..3]
             end
         case set-property
             # SERVICE OBJECT INTERFACE PROPERTY SIGNATURE ARGUMENT...
@@ -83,36 +83,73 @@ function _fish_busctl
             else if not set -q argv[4]
                 __fish_busctl_interfaces $argv[1..2]
             else if not set -q argv[5]
-                __fish_busctl_members property $argv[1..3]
+                __fish_busctl_members_property $argv[1..3]
             else if not set -q argv[6]
-                __fish_busctl_members signature $argv[1..4]
+                __fish_busctl_members_property_signature $argv[1..4]
             end
     end
 end
 
 function __fish_busctl_busnames
-    __fish_busctl list --acquired | string replace -r '\s+.*$' ''
-    # Describe unique names (":1.32") with their process (e.g. `:1.32\tsteam`)
-    __fish_busctl list --unique | string replace -r '\s+\S+\s+(\S+)\s+.*$' '\t$1'
+    __fish_busctl list --full \
+        | while read -l a b c d
+        if string match -r '^:' "$a"
+            # Describe unique names (":1.32") with their process (e.g. `:1.32\tsteam`)
+            echo -e "$a\t$c"
+        else
+            echo "$a"
+        end
+    end
 end
 
 function __fish_busctl_objects -a busname
-    __fish_busctl tree --list $busname | string replace -r '\s+.*$' ''
+    __fish_busctl tree --list $busname
 end
 
 function __fish_busctl_interfaces -a busname -a object
-    __fish_busctl introspect --list $busname $object | string replace -r '\s+.*$' ''
+    __fish_busctl introspect --list $busname $object \
+        | while read --local a b c
+        if test "$b" = interface
+            echo "$a"
+        end
+    end
 end
 
-function __fish_busctl_members -a type -a busname -a object -a interface
+function __fish_busctl_members_method -a busname -a object -a interface
     __fish_busctl introspect --list $busname $object $interface \
-        | string match -- "* $type *" | string replace -r '.(\S+) .*' '$1'
+        | while read -l a b c d e
+        if test "$b" = method
+            # Describe method names with 'signature -> result' (e.g. `GetUser\tu -> o`)
+            echo -e (string replace -r '^\.' '' "$a")"\t$c -> $d"
+        end
+    end
 end
 
-function __fish_busctl_signature -a busname -a object -a interface -a member
+function __fish_busctl_members_property -a busname -a object -a interface
     __fish_busctl introspect --list $busname $object $interface \
-        | string match ".$member *" | while read -l a b c d
-        echo $c
+        | while read -l a b c d
+        if test "$b" = property
+            # Describe property names with signature (e.g. `GID\tu`)
+            echo -e (string replace -r '^\.' '' "$a")"\t$c"
+        end
+    end
+end
+
+function __fish_busctl_members_property_signature -a busname -a object -a interface -a property
+    __fish_busctl introspect --list $busname $object $interface \
+        | while read -l a b c d
+        if test "$a" = ".$property" && test "$b" = property
+            echo "$c"
+        end
+    end
+end
+
+function __fish_busctl_members_method_signature -a busname -a object -a interface -a member
+    __fish_busctl introspect --list $busname $object $interface \
+        | while read -l a b c d
+        if test "$a" = ".$member"
+            echo $c
+        end
     end
 end
 
